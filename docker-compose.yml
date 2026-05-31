@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_server
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: credit-throttle
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: aman
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d credit-throttle" ]
+      interval: 10s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./shared/migrations:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_server
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  transaction-service:
+    build:
+      context: .
+      dockerfile: ./transaction-svc/Dockerfile
+    ports:
+      - "${TRANSACTION_SVC_PORT}:${TRANSACTION_SVC_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+
+  repayment-service:
+    build:
+      context: .
+      dockerfile: ./repayment-svc/Dockerfile
+    ports:
+      - "${REPAYMENT_SVC_PORT}:${REPAYMENT_SVC_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -5,10 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/aman-churiwal/credit-throttle/shared/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type Handler struct {
+	pool        *pgxpool.Pool
+	store       *Store
+	locker      *Locker
+	idempotency *Idempotency
+}
 
 type SpendRequest struct {
 	AccountID string `json:"account_id"`
@@ -20,13 +29,6 @@ type SpendResponse struct {
 	AccountID       string `json:"account_id"`
 	Amount          int64  `json:"amount"`
 	AvailableCredit int64  `json:"available_credit"`
-}
-
-type Handler struct {
-	pool        *pgxpool.Pool
-	store       *Store
-	locker      *Locker
-	idempotency *Idempotency
 }
 
 func NewHandler(pool *pgxpool.Pool, store *Store, locker *Locker, idempotency *Idempotency) *Handler {
@@ -148,4 +150,30 @@ func (h *Handler) Spend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, spendResponse)
+}
+
+func (h *Handler) Audit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 3 || parts[2] == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing account id"})
+		return
+	}
+	accountID := parts[2]
+
+	auditLogs, err := h.store.GetAuditLogs(r.Context(), accountID, 50)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	auditResponse := models.AuditResponse{
+		AccountID: accountID,
+		Events:    auditLogs,
+	}
+	writeJSON(w, http.StatusOK, auditResponse)
 }

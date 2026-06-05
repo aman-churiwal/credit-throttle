@@ -46,11 +46,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	store := NewStore(pool)
+	handler := NewHandler(pool, store)
+
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	http.HandleFunc("/repay", handler.Repay)
 
 	err = http.ListenAndServe(":"+c.RepaymentSvcPort, nil)
 	if err != nil {

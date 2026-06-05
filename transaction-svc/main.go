@@ -58,6 +58,7 @@ func main() {
 	})
 
 	http.HandleFunc("/spend", handler.Spend)
+	http.HandleFunc("/accounts/", handler.Audit)
 
 	err = http.ListenAndServe(":"+c.TransactionSvcPort, nil)
 	if err != nil {

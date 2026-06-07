@@ -89,11 +89,18 @@ func (h *Handler) Spend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lockKey := fmt.Sprintf("lock:account:%s", req.AccountID)
-
-	token, err := h.locker.Acquire(r.Context(), lockKey, 5*time.Second)
-
-	if err != nil {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+	var token string
+	var lockErr error
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		token, lockErr = h.locker.Acquire(r.Context(), lockKey, 500*time.Millisecond)
+		if lockErr == nil {
+			break
+		}
+		time.Sleep(time.Duration(attempt+1) * 10 * time.Millisecond)
+	}
+	if lockErr != nil {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": lockErr.Error()})
 		return
 	}
 	defer h.locker.Release(r.Context(), lockKey, token)
